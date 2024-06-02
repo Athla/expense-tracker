@@ -2,7 +2,10 @@ module github.com/Athla/expense-tracker.git
 
 go 1.21.3
 
-require github.com/charmbracelet/bubbletea v0.26.2
+require (
+	github.com/charmbracelet/bubbletea v0.26.2
+	github.com/jmoiron/sqlx v1.4.0
+)
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
