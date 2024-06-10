@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -10,9 +11,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const (
+	progBarWidth  = 72
+	progBarFull   = "█"
+	progEmptyChar = "░"
+	dot           = " • "
+)
+
 var (
 	debug = flag.Bool("Debug", false, "Sets the debug mode")
 )
+
+// ADD FUNCTIONALITY TO THE BUTTONS, TURN THEM INTO PROPER BUTTONS
 var choices = []string{"Manage expenses", "Generate report"}
 
 type model struct {
@@ -53,7 +63,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	s := strings.Builder{}
-	s.WriteString("What do you want to do?")
+	s.WriteString("What do you want to do?\n")
 
 	for i := 0; i < len(choices); i++ {
 		if m.cursor == i {
@@ -71,6 +81,7 @@ func (m model) View() string {
 	return s.String()
 }
 func main() {
+	log.Println("INCOMPLETE -- ADD FUNCTIONALITY TO THE CHOICES -- KEEP BROKEN UNTIL OK")
 	p := tea.NewProgram(model{})
 
 	m, err := p.Run()
