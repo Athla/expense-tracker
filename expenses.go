@@ -1,8 +1,8 @@
-package expense
+package main
 
 type Expense struct {
-	Type        string
 	Name        string
-	Value       string
+	Value       float32
+	Tag         string
 	Description string
 }
