@@ -50,14 +50,14 @@ func (m Model) Init() tea.Cmd { return textinput.Blink }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		k := msg.String()
-		if k == "q" || k == "esc" || k == "ctrl+c" {
+		switch k {
+		case "esc", "ctrl+c":
 			m.quitting = true
 			time.Sleep(time.Duration(200) * time.Millisecond)
 			return m, tea.Quit
-		}
-		if k == "c" {
+		case tea.KeyCtrlC.String():
 			m.chosen = true
-		} else if k == "v" {
+		case tea.KeyCtrlH.String():
 			m.chosen = false
 		}
 	}
