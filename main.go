@@ -16,19 +16,26 @@ var baseStyle = lipgloss.
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("420"))
 
+const (
+	hotPink  = lipgloss.Color("#FF06B7")
+	darkGray = lipgloss.Color("#767676")
+)
+
+var (
+	inputStyle    = lipgloss.NewStyle().Foreground(hotPink)
+	continueStyle = lipgloss.NewStyle().Foreground(darkGray)
+)
+
 type Model struct {
-	options    []string
-	cursor     int
-	choice     string
-	table      table.Model
-	nameInput  textinput.Model
-	valueInput textinput.Model
-	tagInput   textinput.Model
-	typeInput  textinput.Model
-	submit     bool
-	chosen     bool
-	quitting   bool
-	err        error
+	options  []string
+	cursor   int
+	choice   string
+	table    table.Model
+	inputs   []textinput.Model
+	submit   bool
+	chosen   bool
+	quitting bool
+	err      error
 }
 
 type Expense struct {
@@ -66,8 +73,8 @@ func updateChoices(msg tea.Msg, m Model) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "j", "down":
 			m.cursor++
-			if m.cursor > 3 {
-				m.cursor = 3
+			if m.cursor > len(m.options)-1 {
+				m.cursor = len(m.options) - 1
 			}
 		case "k", "up":
 			m.cursor--
@@ -85,49 +92,47 @@ func updateChoices(msg tea.Msg, m Model) (tea.Model, tea.Cmd) {
 }
 
 func updateChosen(msg tea.Msg, m Model) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd = make([]tea.Cmd, len(m.inputs))
 	switch m.choice {
 	case "Add":
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.Type {
 			case tea.KeyTab:
-				if m.nameInput.Focused() {
-					m.nameInput.Blur()
-					m.valueInput.Focus()
-				} else if m.valueInput.Focused() {
-					m.valueInput.Blur()
-					m.tagInput.Focus()
-				} else if m.tagInput.Focused() {
-					m.tagInput.Blur()
-					m.typeInput.Focus()
-				} else {
-					m.typeInput.Blur()
-					m.nameInput.Focus()
+				m.cursor++
+				if m.cursor > len(m.inputs)-1 {
+					m.cursor = len(m.inputs) - 1
 				}
-
-				return m, nil
+			case tea.KeyShiftTab:
+				m.cursor--
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
 			case tea.KeyEnter:
 				m.submit = true
 			}
 		}
 
-		m.nameInput, cmd = m.nameInput.Update(msg)
-		m.valueInput, _ = m.valueInput.Update(msg)
-		m.tagInput, _ = m.tagInput.Update(msg)
-		m.typeInput, _ = m.typeInput.Update(msg)
+		for i := range m.inputs {
+			m.inputs[i].Blur()
+		}
+		m.inputs[m.cursor].Focus()
 
 		if m.submit == true {
 			rows = append(rows, table.Row{
-				m.nameInput.Value(),
-				m.valueInput.Value(),
-				m.tagInput.Value(),
-				m.tagInput.Value(),
+				m.inputs[name].Value(),
+				m.inputs[val].Value(),
+				m.inputs[tag].Value(),
+				m.inputs[etype].Value(),
 			})
 			m.table.SetRows(rows)
+			m.chosen = false
 		}
-		return m, cmd
-	case "See":
+		for i := range m.inputs {
+			m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
+		}
+		return m, tea.Batch(cmds...)
+	case "See & Manage":
 		m.table.Focus()
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -143,10 +148,13 @@ func updateChosen(msg tea.Msg, m Model) (tea.Model, tea.Cmd) {
 				if m.cursor < 0 {
 					m.cursor = 0
 				}
+			case "d":
+				rows := m.table.Rows()
+				rows = append(rows[:m.cursor], rows[m.cursor+1:]...)
+				m.table.SetRows(rows)
 			}
 			return m, nil
 		}
-	case "Manage":
 	}
 	return m, nil
 }
@@ -166,11 +174,11 @@ func choicesView(m Model, s string) string {
 	for i, opt := range m.options {
 		cursor := " "
 		if m.cursor == i {
-			cursor = "►"
+			cursor = "► "
 		}
-		checked := "◇"
+		checked := "◇ "
 		if m.choice == m.options[i] {
-			checked = "◆"
+			checked = "◆ "
 		}
 		s += fmt.Sprintf("\n%s %s %s", cursor, checked, opt)
 	}
@@ -181,16 +189,15 @@ func chosenView(m Model, s string) string {
 	switch m.choice {
 	case "Add":
 		s = "What are we adding today?\n"
-		s += fmt.Sprintf(
-			"%s\n%s\n%s\n%s\n",
-			m.nameInput.View(),
-			m.valueInput.View(),
-			m.tagInput.View(),
-			m.typeInput.View(),
-		)
-
+		for i, ip := range m.inputs {
+			cursor := " "
+			if m.cursor == i {
+				cursor = "► "
+			}
+			s += fmt.Sprintf("\n%v%v", cursor, ip.View())
+		}
 		s += "\n\n\nPress 'Tab' to traverse field.\nPress 'Enter' to submit."
-	case "See":
+	case "See & Manage":
 		for i, opt := range m.table.Rows() {
 			cursor := " "
 			if m.cursor == i {
@@ -198,46 +205,54 @@ func chosenView(m Model, s string) string {
 			}
 			s += fmt.Sprintf("\n%s %s", cursor, opt)
 		}
-	case "Manage":
-		s = "This is the managing function"
 	}
 	return s
 }
 
+const (
+	name = iota
+	val
+	tag
+	etype
+)
+
 func initModel() Model {
+	var inputs []textinput.Model = make([]textinput.Model, 4)
+
+	inputs[name] = textinput.New()
+	inputs[name].Placeholder = "\n\nName of your expense\n\n"
+	inputs[name].CharLimit = 156
+	inputs[name].Width = 55
+	inputs[name].Prompt = ""
+	inputs[name].Focus()
+
+	inputs[val] = textinput.New()
+	inputs[val].Placeholder = "\n\nValue of your expense\n\n"
+	inputs[val].CharLimit = 156
+	inputs[val].Width = 55
+	inputs[val].Prompt = ""
+
+	inputs[tag] = textinput.New()
+	inputs[tag].Placeholder = "\n\nTag your expense\n\n"
+	inputs[tag].CharLimit = 156
+	inputs[tag].Width = 55
+	inputs[tag].Prompt = ""
+
+	inputs[etype] = textinput.New()
+	inputs[etype].Placeholder = "\n\nWhat's the type of your expense\n\n"
+	inputs[etype].CharLimit = 156
+	inputs[etype].Width = 55
+	inputs[etype].Prompt = ""
+
 	t := table.New()
 	t.SetColumns(columns)
 	t.SetRows(rows)
 
-	nameInput := textinput.New()
-	nameInput.Placeholder = "\n\nName of your expense\n\n"
-	nameInput.CharLimit = 156
-	nameInput.Width = 55
-	nameInput.Focus()
-
-	valueInput := textinput.New()
-	valueInput.Placeholder = "\n\nValue of your expense\n\n"
-	valueInput.CharLimit = 156
-	valueInput.Width = 55
-
-	tagInput := textinput.New()
-	tagInput.Placeholder = "\n\nTag your expense\n\n"
-	tagInput.CharLimit = 156
-	tagInput.Width = 55
-
-	typeInput := textinput.New()
-	typeInput.Placeholder = "\n\nWhat's the type of your expense\n\n"
-	typeInput.CharLimit = 156
-	typeInput.Width = 55
-
 	return Model{
-		options:    []string{"Add", "Manage", "See"},
-		nameInput:  nameInput,
-		valueInput: valueInput,
-		tagInput:   tagInput,
-		typeInput:  typeInput,
-		table:      t,
-		submit:     false,
+		options: []string{"Add", "See & Manage"},
+		inputs:  inputs,
+		table:   t,
+		submit:  false,
 	}
 }
 
@@ -247,4 +262,4 @@ func main() {
 		fmt.Printf("Error! %s", err)
 		os.Exit(1)
 	}
-}
+} // nextInput focuses the next input field
